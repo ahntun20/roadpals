@@ -65,6 +65,16 @@ Scan the QR code with **Expo Go**. Sign in with any phone number — in dev mode
 
 > Expo Go can't track location in the background, so it tracks only while the app is open (the app tells you this). For background tracking, make a development build: `npx expo run:ios` / `npx expo run:android`, or `npx eas-cli@latest build --profile development`.
 
+### Windows: start everything at once
+
+With Docker Desktop running, in PowerShell from the `roadpals` folder:
+
+```powershell
+.\start-windows.ps1 -Lat 40.758 -Lng -73.9855
+```
+
+It opens three windows (server, fake drivers near your lat/lng, and the Expo app with your computer's IP already set). Scan the QR code with Expo Go.
+
 ## Running the server without Docker
 
 ```bash
