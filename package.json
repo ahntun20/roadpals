@@ -1,0 +1,20 @@
+{
+  "name": "roadpals",
+  "private": true,
+  "version": "0.1.0",
+  "description": "RoadPals — a Waze-style driving app where you earn points for driving, passing other drivers, waving and reporting hazards.",
+  "workspaces": [
+    "packages/shared",
+    "server",
+    "simulator"
+  ],
+  "scripts": {
+    "test": "npm run test -w @roadpals/shared && npm run test -w @roadpals/server",
+    "typecheck": "npm run typecheck -w @roadpals/shared && npm run typecheck -w @roadpals/server && npm run typecheck -w @roadpals/simulator",
+    "dev": "npm run dev -w @roadpals/server",
+    "simulate": "npm run start -w @roadpals/simulator"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

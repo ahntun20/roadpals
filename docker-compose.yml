@@ -1,0 +1,42 @@
+# Local stack: Postgres + Redis + the RoadPals API on http://localhost:4000
+#   docker compose up --build
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: roadpals
+      POSTGRES_PASSWORD: roadpals
+      POSTGRES_DB: roadpals
+    ports: ["5432:5432"]
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U roadpals"]
+      interval: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      retries: 20
+
+  server:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    environment:
+      NODE_ENV: development # DEV_LOGIN is on in development; set NODE_ENV=production for real users
+      DATABASE_URL: postgres://roadpals:roadpals@postgres:5432/roadpals
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET:-dev-only-change-me}
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-dev-admin}
+      DEV_LOGIN: ${DEV_LOGIN:-true}
+    ports: ["4000:4000"]
+
+volumes:
+  pgdata:
