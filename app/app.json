@@ -11,9 +11,7 @@
       "supportsTablet": false,
       "bundleIdentifier": "com.roadpals.app",
       "infoPlist": {
-        "UIBackgroundModes": [
-          "location"
-        ]
+        "UIBackgroundModes": ["location"]
       }
     },
     "android": {
@@ -35,11 +33,17 @@
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "RoadPals uses your location while you drive to count kilometres, detect drivers you pass and show nearby hazards \u2014 even when the app is in the background.",
+          "locationAlwaysAndWhenInUsePermission": "RoadPals uses your location while you drive to count kilometres, detect drivers you pass and show nearby hazards — even when the app is in the background.",
           "locationWhenInUsePermission": "RoadPals uses your location to show you on the map and count your drive.",
           "isIosBackgroundLocationEnabled": true,
           "isAndroidBackgroundLocationEnabled": true,
           "isAndroidForegroundServiceEnabled": true
+        }
+      ],
+      [
+        "react-native-maps",
+        {
+          "androidGoogleMapsApiKey": "process.env.GOOGLE_MAPS_API_KEY"
         }
       ]
     ],
