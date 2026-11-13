@@ -44,8 +44,9 @@ docker compose exec -T -e SEED_LAT=$Lat -e SEED_LNG=$Lng server npx tsx src/seed
 # 2. Fake drivers
 Start-Process powershell -ArgumentList '-NoExit', '-Command', "Set-Location '$root'; `$host.UI.RawUI.WindowTitle='RoadPals simulator'; `$env:API_URL='http://127.0.0.1:4000'; `$env:SIM_LAT='$Lat'; `$env:SIM_LNG='$Lng'; `$env:SIM_DRIVERS='$Drivers'; npm run simulate"
 
-# 3. App (scan the QR code with Expo Go)
-Start-Process powershell -ArgumentList '-NoExit', '-Command', "Set-Location '$root\app'; `$host.UI.RawUI.WindowTitle='RoadPals app'; `$env:EXPO_PUBLIC_API_URL='http://${ip}:4000'; npx expo start"
+# 3. App (scan the QR code with Expo Go). REACT_NATIVE_PACKAGER_HOSTNAME makes the QR code use
+#    your Wi-Fi IP instead of a virtual adapter (VirtualBox/WSL) the phone can't reach.
+Start-Process powershell -ArgumentList '-NoExit', '-Command', "Set-Location '$root\app'; `$host.UI.RawUI.WindowTitle='RoadPals app'; `$env:EXPO_PUBLIC_API_URL='http://${ip}:4000'; `$env:REACT_NATIVE_PACKAGER_HOSTNAME='$ip'; npx expo start"
 
 Write-Host ''
 Write-Host 'All started. Scan the QR code in the "RoadPals app" window with Expo Go.' -ForegroundColor Green
