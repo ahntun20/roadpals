@@ -100,6 +100,15 @@ describe('RoadPals end to end', () => {
     ann = await signup('Ann', '+15550000001', { vehicleType: 'car', vehicleBrand: 'Toyota' });
     ben = await signup('Ben', '+15550000002', { vehicleType: 'taxi', inviteCode: ann.inviteCode });
     cat = await signup('Cat', '+15550000003', { vehicleType: 'bus' });
+    // New user: the app first sends just the code, then sends it again with a profile.
+    const rc = await api('POST', '/v1/auth/request-code', undefined, { phone: '+15550000004' });
+    const step1 = await api('POST', '/v1/auth/verify', undefined, { phone: '+15550000004', code: rc.body.devCode });
+    expect(step1.status).toBe(400);
+    expect(step1.body.needsProfile).toBe(true);
+    const step2 = await api('POST', '/v1/auth/verify', undefined, { phone: '+15550000004', code: rc.body.devCode, name: 'Dee' });
+    expect(step2.status).toBe(200);
+    const reuse = await api('POST', '/v1/auth/verify', undefined, { phone: '+15550000004', code: rc.body.devCode });
+    expect(reuse.status).toBe(401); // single use once signed in
     const wrong = await api('POST', '/v1/auth/verify', undefined, { phone: '+15550000009', code: '123456', name: 'Xavier' });
     expect(wrong.status).toBe(401);
     const me = await api('GET', '/v1/me', ben.token);

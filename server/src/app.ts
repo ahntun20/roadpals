@@ -114,10 +114,10 @@ export async function buildApp(deps: AppDeps) {
       }
       return reply.code(401).send({ error: 'Wrong code' });
     }
-    await ctx.redis.del(`otp:${body.phone}`);
     let user = (await ctx.db.query('SELECT * FROM users WHERE phone=$1', [body.phone])).rows[0];
     let isNew = false;
     if (!user) {
+      // Keep the code valid: the app sends it again with the new driver's name and vehicle.
       if (!body.name) return reply.code(400).send({ error: 'Choose a driver name', needsProfile: true });
       const inviter = body.inviteCode ? (await ctx.db.query('SELECT id FROM users WHERE invite_code=$1', [body.inviteCode.toUpperCase()])).rows[0] : null;
       const type = body.vehicleType ?? 'car';
@@ -131,6 +131,7 @@ export async function buildApp(deps: AppDeps) {
       }
       isNew = true;
     }
+    await ctx.redis.del(`otp:${body.phone}`); // single use, once sign-in has succeeded
     await refreshProfile(ctx, user);
     return { token: sign(String(user.id)), isNew, me: await mePayload(ctx, user) };
   });
