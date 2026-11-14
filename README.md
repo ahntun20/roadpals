@@ -126,9 +126,35 @@ Admin endpoints need the `x-admin-token` header: `PUT /admin/rules` (change poin
 - **Points ledger**: every change is one row (`earn`, `spend`, `gift`, `expire`, `reverse`). Lifetime = earn + reverse; balance = all rows.
 - **Realtime**: WebSocket messages go through Redis pub/sub, so you can run several server instances behind a load balancer.
 
+## Deploy the server to Railway
+
+The repo includes `railway.json`, so Railway builds `server/Dockerfile` and checks `/health` on every deploy.
+
+1. Sign up at railway.com with GitHub. **New Project → Deploy from GitHub repo → `roadpals`**.
+2. In the project: **+ Create → Database → PostgreSQL**, then **+ Create → Database → Redis**.
+3. Open the `roadpals` service → **Variables** and add:
+
+   | Variable | Value |
+   |---|---|
+   | `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` |
+   | `REDIS_URL` | `${{Redis.REDIS_URL}}` |
+   | `NODE_ENV` | `production` |
+   | `JWT_SECRET` | a long random string |
+   | `ADMIN_TOKEN` | another long random string |
+   | `BETA_LOGIN_CODE` | a secret 6-digit code for testers (until SMS is connected) |
+
+4. **Settings → Networking → Generate Domain** (port 4000). Open `https://<your-domain>/health`.
+5. App: `EXPO_PUBLIC_API_URL=https://<your-domain>` then `npx expo start --clear`. Sign in with any number and the beta code.
+6. Optional: sample places and fake drivers against the hosted server:
+   ```bash
+   API_URL=https://<your-domain> SIM_LOGIN_CODE=<beta code> SIM_LAT=… SIM_LNG=… npm run simulate
+   ```
+
+Every push to `main` redeploys automatically.
+
 ## Going to production — checklist
 
-- [ ] Set `NODE_ENV=production`, a long random `JWT_SECRET`, `ADMIN_TOKEN`, and `DEV_LOGIN=false`.
+- [ ] Set `NODE_ENV=production`, a long random `JWT_SECRET`, `ADMIN_TOKEN`, and `DEV_LOGIN=false`. Remove `BETA_LOGIN_CODE` once SMS works.
 - [ ] Plug an SMS provider (e.g. Twilio Verify) into `POST /v1/auth/request-code` in `server/src/app.ts`.
 - [ ] Use managed Postgres and Redis with backups.
 - [ ] Android: add a Google Maps API key (`GOOGLE_MAPS_API_KEY`, see `app/app.json`).

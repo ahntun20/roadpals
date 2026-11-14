@@ -9,6 +9,7 @@ import { offset, type LatLng, type ServerMsg } from '@roadpals/shared';
 
 process.env.ADMIN_TOKEN = 'test-admin';
 process.env.DEV_LOGIN = 'true';
+process.env.BETA_LOGIN_CODE = '482917';
 process.env.JOB_INTERVAL_MS = '3600000';
 
 const DB_URL = process.env.TEST_DATABASE_URL ?? 'postgres://roadpals:roadpals@localhost:5432/roadpals_test';
@@ -111,6 +112,8 @@ describe('RoadPals end to end', () => {
     expect(reuse.status).toBe(401); // single use once signed in
     const wrong = await api('POST', '/v1/auth/verify', undefined, { phone: '+15550000009', code: '123456', name: 'Xavier' });
     expect(wrong.status).toBe(401);
+    const beta = await api('POST', '/v1/auth/verify', undefined, { phone: '+15550000010', code: '482917', name: 'Beta' });
+    expect(beta.status).toBe(200); // shared beta code works without an SMS
     const me = await api('GET', '/v1/me', ben.token);
     expect(me.body.vehicleBrand).toBe('City Cab');
     expect(me.body.profile.color).toBe('#facc15');

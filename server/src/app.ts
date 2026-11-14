@@ -105,7 +105,7 @@ export async function buildApp(deps: AppDeps) {
     }).parse(req.body);
     const stored = await ctx.redis.get(`otp:${body.phone}`);
     const rec = stored ? (JSON.parse(stored) as { code: string; tries: number }) : null;
-    const ok = (config.devLogin && body.code === '000000') || (rec && rec.code === body.code);
+    const ok = (config.devLogin && body.code === '000000') || (!!config.betaLoginCode && body.code === config.betaLoginCode) || (rec && rec.code === body.code);
     if (!ok) {
       if (rec) {
         rec.tries++;

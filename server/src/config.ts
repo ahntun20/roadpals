@@ -17,6 +17,11 @@ export const config = {
   adminToken: env.ADMIN_TOKEN ?? '',
   /** Dev login: the verification code is returned by the API and 000000 always works. Never enable in production. */
   devLogin: (env.DEV_LOGIN ?? (env.NODE_ENV === 'production' ? 'false' : 'true')) === 'true',
+  /**
+   * Shared sign-in code for a private beta before SMS is set up: anyone who knows it can sign in
+   * with any phone number. Must be 6 digits and kept secret. Leave empty once SMS works.
+   */
+  betaLoginCode: env.BETA_LOGIN_CODE ?? '',
   /** Optional OSRM server for routes (e.g. http://localhost:5000). */
   osrmUrl: env.OSRM_URL ?? '',
 
@@ -40,3 +45,5 @@ if (env.NODE_ENV === 'production') {
   if (config.jwtSecret === 'dev-only-change-me') throw new Error('Set JWT_SECRET in production');
   if (config.devLogin) throw new Error('DEV_LOGIN must be false in production');
 }
+if (config.betaLoginCode && !/^\d{6}$/.test(config.betaLoginCode)) throw new Error('BETA_LOGIN_CODE must be exactly 6 digits');
+if (config.betaLoginCode === '000000' || config.betaLoginCode === '123456') throw new Error('Pick a less guessable BETA_LOGIN_CODE');

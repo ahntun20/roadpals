@@ -16,6 +16,8 @@ const N = Number(process.env.SIM_DRIVERS ?? 25);
 const BLOCK_M = Number(process.env.SIM_BLOCK_M ?? 200); // street spacing
 const GRID = Number(process.env.SIM_GRID ?? 8); // streets each way from the centre
 const TICK_S = Number(process.env.SIM_TICK_S ?? 3);
+/** 000000 for a local dev server; for a hosted server use its BETA_LOGIN_CODE. */
+const LOGIN_CODE = process.env.SIM_LOGIN_CODE ?? '000000';
 
 const FIRST = ['Mia', 'Leo', 'Ava', 'Kai', 'Zoe', 'Omar', 'Lena', 'Raj', 'Ivy', 'Theo', 'Nora', 'Jae', 'Sam', 'Rosa', 'Eli', 'Maya', 'Ben', 'Tia', 'Hugo', 'Luz', 'Finn', 'Aria', 'Dev', 'June', 'Max', 'Ana', 'Cole', 'Priya', 'Gus', 'Nia'];
 const SUF = ['OnMain', 'Drives', 'Rolls', 'GT', 'Cruises', 'Zoom', 'Rides', 'Express', 'Go'];
@@ -44,9 +46,9 @@ async function makeBot(i: number): Promise<Bot> {
   const phone = `+1555${String(9000000 + i).padStart(7, '0')}`;
   let res: Record<string, unknown>;
   try {
-    res = await post('/v1/auth/verify', { phone, code: '000000', name, tz: 'UTC', vehicleType: type, vehicleBrand: pick(BRANDS[type]).name });
+    res = await post('/v1/auth/verify', { phone, code: LOGIN_CODE, name, tz: 'UTC', vehicleType: type, vehicleBrand: pick(BRANDS[type]).name });
   } catch (e) {
-    throw new Error(`Bot sign-in failed — is the server running with DEV_LOGIN=true? ${(e as Error).message}`);
+    throw new Error(`Bot sign-in failed — is the server running, and is SIM_LOGIN_CODE right (000000 locally, the BETA_LOGIN_CODE on a hosted server)? ${(e as Error).message}`);
   }
   const me = res.me as { passengerMode: boolean };
   if (!me.passengerMode) await fetch(`${API}/v1/me`, { method: 'PATCH', headers: { 'content-type': 'application/json', authorization: `Bearer ${res.token}` }, body: JSON.stringify({ passengerMode: true }) });
