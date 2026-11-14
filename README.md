@@ -138,6 +138,7 @@ The repo includes `railway.json`, so Railway builds `server/Dockerfile` and chec
    |---|---|
    | `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` |
    | `REDIS_URL` | `${{Redis.REDIS_URL}}` |
+   | `PORT` | `4000` |
    | `NODE_ENV` | `production` |
    | `JWT_SECRET` | a long random string |
    | `ADMIN_TOKEN` | another long random string |
