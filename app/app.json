@@ -44,7 +44,11 @@
       ]
     ],
     "extra": {
-      "apiUrl": "http://localhost:4000"
-    }
+      "apiUrl": "http://localhost:4000",
+      "eas": {
+        "projectId": "8bfa95ee-3a0f-4739-804e-e1db0bff9775"
+      }
+    },
+    "owner": "ahntung"
   }
 }
