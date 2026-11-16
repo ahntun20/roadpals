@@ -27,6 +27,7 @@ export default function MapScreen() {
   const [roadName, setRoadName] = useState('');
   const [pendingDest, setPendingDest] = useState<LatLng | null>(null);
   const [dest, setDest] = useState<LatLng | null>(me?.activeTrip ? ll(me.activeTrip) : null);
+  const [destSetAt, setDestSetAt] = useState(0);
   const [route, setRoute] = useState<LatLng[] | null>(null);
 
   useEffect(() => { void isDriving().then((d) => d && setMode('foreground')); }, []);
@@ -39,7 +40,8 @@ export default function MapScreen() {
 
   // Hazards and places near me, refreshed every 30 s.
   const fixRef = useRef(live.myFix);
-  fixRef.current = live.myFix;
+  useEffect(() => { fixRef.current = live.myFix; }, [live.myFix]);
+  const hasFix = live.myFix != null;
   useEffect(() => {
     const load = async () => {
       const f = fixRef.current;
@@ -51,7 +53,7 @@ export default function MapScreen() {
     void load();
     const t = setInterval(load, 30_000);
     return () => clearInterval(t);
-  }, [live.myFix != null]);
+  }, [hasFix]);
 
   const toggleDrive = async () => {
     try {
@@ -85,6 +87,7 @@ export default function MapScreen() {
     setPendingDest(null);
     await api.startTrip(to.latitude, to.longitude);
     setDest(to);
+    setDestSetAt(Date.now());
     setFollow(true);
     const f = live.myFix;
     if (f) {
@@ -94,14 +97,14 @@ export default function MapScreen() {
   };
   const cancelTrip = async () => { await api.cancelTrip().catch(() => {}); setDest(null); setRoute(null); };
 
-  // Clear the destination once the server says we've arrived.
-  useEffect(() => {
-    if (dest && live.feed[0]?.ruleId === 'trip') { setDest(null); setRoute(null); }
-  }, [live.feed[0]?.id]);
+  // The trip ends when the server awards "Arrived at destination" after we set it.
+  const arrived = dest != null && live.feed.some((e) => e.ruleId === 'trip' && Date.parse(e.createdAt) >= destSetAt - 5000);
+  const activeDest = arrived ? null : dest;
+  const activeRoute = arrived ? null : route;
 
   if (!me) return null;
   const theme = me.equipped.theme.replace('theme:', '');
-  const waveBack = live.incomingWave && live.incomingWave.until > Date.now();
+  const waveBack = live.incomingWave != null; // cleared by LiveProvider when the 5 s window ends
 
   return (
     <View style={{ flex: 1 }}>
@@ -118,7 +121,7 @@ export default function MapScreen() {
         onPanDrag={() => setFollow(false)}
         onLongPress={(e: LongPressEvent) => setPendingDest(e.nativeEvent.coordinate)}
       >
-        {route && <Polyline coordinates={route} strokeColor={COLORS.cyan} strokeWidth={6} />}
+        {activeRoute && <Polyline coordinates={activeRoute} strokeColor={COLORS.cyan} strokeWidth={6} />}
         {places.map((p) => (
           <Marker key={`p${p.id}`} coordinate={ll(p)} title={p.name} description={p.checkedInToday ? 'Checked in today' : 'Drive past to check in'} tracksViewChanges={false}>
             <View style={[s.place, p.checkedInToday && { borderColor: COLORS.green, backgroundColor: '#dcfce7' }]}><Text style={{ fontSize: 16 }}>{p.icon}</Text></View>
@@ -139,7 +142,7 @@ export default function MapScreen() {
             <Vehicle me type={me.vehicleType} color={me.profile.color} rainbow={me.equipped.skin === 'skin:rainbow'} />
           </Marker>
         )}
-        {dest && <Marker coordinate={dest} title="Destination"><Text style={{ fontSize: 26 }}>🏁</Text></Marker>}
+        {activeDest && <Marker coordinate={activeDest} title="Destination"><Text style={{ fontSize: 26 }}>🏁</Text></Marker>}
         {pendingDest && <Marker coordinate={pendingDest} pinColor={COLORS.cyan} />}
       </MapView>
 
@@ -186,7 +189,7 @@ export default function MapScreen() {
       {pendingDest && (
         <View style={s.card}><Text style={{ fontSize: 26 }}>🏁</Text><Text style={[s.cardTitle, { flex: 1 }]}>Navigate here?</Text><Button title="Go" onPress={() => navigate(pendingDest)} /><Button title="Cancel" kind="secondary" onPress={() => setPendingDest(null)} /></View>
       )}
-      {dest && !pendingDest && !live.hazardPrompt && !waveBack && (
+      {activeDest && !pendingDest && !live.hazardPrompt && !waveBack && (
         <View style={s.card}><Text style={{ fontSize: 22 }}>🧭</Text><Text style={[s.cardTitle, { flex: 1 }]}>Navigating · +10 on arrival, +8 if you don’t speed</Text><Button title="Cancel" kind="secondary" onPress={cancelTrip} /></View>
       )}
 

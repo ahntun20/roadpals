@@ -303,6 +303,66 @@ describe('RoadPals end to end', () => {
     expect(row.rows[0].passes).toBe(1);
   });
 
+  it('serves the privacy policy', async () => {
+    const r = await built.app.inject({ method: 'GET', url: '/privacy' });
+    expect(r.statusCode).toBe(200);
+    expect(r.headers['content-type']).toMatch(/text\/html/);
+    expect(r.body).toContain('Delete account');
+  });
+
+  it('signs in with real SMS codes through the verifier (each code accepted once by Twilio)', async () => {
+    const sent: string[] = [];
+    const used = new Set<string>();
+    const fakeSms = {
+      send: async (phone: string) => { sent.push(phone); },
+      check: async (phone: string, code: string) => {
+        if (code !== '246810' || used.has(phone)) return false;
+        used.add(phone); // like Twilio: an approved code can't be checked again
+        return true;
+      },
+    };
+    const sub2 = new Redis(REDIS_URL);
+    const smsApp = await buildApp({ db, redis, sub: sub2, now, sms: fakeSms });
+    const call = (url: string, body: object) => smsApp.app.inject({ method: 'POST', url, payload: body });
+
+    const noPlus = await call('/v1/auth/request-code', { phone: '4165550199' });
+    expect(noPlus.statusCode).toBe(400);
+    const req = await call('/v1/auth/request-code', { phone: '+14165550199' });
+    expect(req.json()).toEqual({ sent: true }); // no dev code when real SMS is on
+    expect(sent).toEqual(['+14165550199']);
+
+    expect((await call('/v1/auth/verify', { phone: '+14165550199', code: '111111' })).statusCode).toBe(401);
+    const first = await call('/v1/auth/verify', { phone: '+14165550199', code: '246810' });
+    expect(first.json().needsProfile).toBe(true);
+    const second = await call('/v1/auth/verify', { phone: '+14165550199', code: '246810', name: 'SmsDriver' });
+    expect(second.statusCode).toBe(200); // remembered after Twilio approved it once
+    const replay = await call('/v1/auth/verify', { phone: '+14165550199', code: '246810' });
+    expect(replay.statusCode).toBe(401); // single use once signed in
+    await smsApp.app.close();
+    sub2.disconnect();
+  });
+
+  it('deletes an account and all its data', async () => {
+    const del = await signup('ToDelete', '+15552220001');
+    await drive(del, offset(BASE, 30_000, 0), 90, 1100);
+    await api('PATCH', '/v1/me', del.token, { passengerMode: true });
+    expect((await ledger(del)).length).toBeGreaterThan(0);
+    expect(await redis.exists(`prof:${del.id}`)).toBe(1);
+
+    const r = await api('DELETE', '/v1/me', del.token);
+    expect(r.body).toEqual({ deleted: true });
+    expect((await api('GET', '/v1/me', del.token)).status).toBe(401);
+    expect((await db.query('SELECT count(*)::int n FROM users WHERE id=$1', [del.id])).rows[0].n).toBe(0);
+    expect((await db.query('SELECT count(*)::int n FROM points_ledger WHERE user_id=$1', [del.id])).rows[0].n).toBe(0);
+    expect(await redis.exists(`prof:${del.id}`, `live:fix:${del.id}`, `explored:${del.id}`)).toBe(0);
+    expect(await redis.zscore('live:pos', del.id)).toBeNull();
+    const fixAfter = await api('POST', '/v1/locations', del.token, { fixes: [{ lat: BASE.lat, lng: BASE.lng, ts: clock }] });
+    expect(fixAfter.status).toBe(401);
+    // The same phone number can sign up again as a new account.
+    const again = await signup('Returning', '+15552220001');
+    expect(again.id).not.toBe(del.id);
+  });
+
   it('keeps every balance equal to its ledger', async () => {
     const r = await db.query(`
       SELECT u.id, u.balance, u.lifetime_points,

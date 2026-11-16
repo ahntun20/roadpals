@@ -32,3 +32,6 @@ export const COLORS = {
   red: '#ef4444',
   purple: '#8b5cf6',
 };
+
+/** Privacy policy page served by the RoadPals server. */
+export const PRIVACY_URL = `${API_URL}/privacy`;

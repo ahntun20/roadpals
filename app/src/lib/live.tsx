@@ -43,7 +43,7 @@ export function LiveProvider({ children }: { children: ReactNode }) {
   const [hazardPrompt, setHazardPrompt] = useState<HazardDTO | null>(null);
   const ws = useRef<WebSocket | null>(null);
   const meRef = useRef(me);
-  meRef.current = me;
+  useEffect(() => { meRef.current = me; }, [me]);
   const nextId = useRef(1);
 
   const toast = useCallback((icon: string, text: string, points?: number) => {
@@ -57,7 +57,7 @@ export function LiveProvider({ children }: { children: ReactNode }) {
   // Phones send few GPS updates when you're not moving. While a drive is on, re-send the last
   // position every few seconds so nearby drivers, waves and hazard prompts keep updating.
   const myFixRef = useRef<Fix | null>(null);
-  myFixRef.current = myFix;
+  useEffect(() => { myFixRef.current = myFix; }, [myFix]);
   useEffect(() => {
     const t = setInterval(() => {
       const f = myFixRef.current;

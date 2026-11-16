@@ -22,6 +22,12 @@ export const config = {
    * with any phone number. Must be 6 digits and kept secret. Leave empty once SMS works.
    */
   betaLoginCode: env.BETA_LOGIN_CODE ?? '',
+  /** Twilio Verify for real SMS codes. All three must be set to turn SMS on. */
+  twilio: env.TWILIO_ACCOUNT_SID && env.TWILIO_AUTH_TOKEN && env.TWILIO_VERIFY_SERVICE_SID
+    ? { accountSid: env.TWILIO_ACCOUNT_SID, authToken: env.TWILIO_AUTH_TOKEN, serviceSid: env.TWILIO_VERIFY_SERVICE_SID }
+    : null,
+  /** Email shown on the privacy policy page for privacy questions and data requests. */
+  privacyContact: env.PRIVACY_CONTACT_EMAIL ?? '',
   /** Optional OSRM server for routes (e.g. http://localhost:5000). */
   osrmUrl: env.OSRM_URL ?? '',
 

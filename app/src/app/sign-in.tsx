@@ -1,10 +1,10 @@
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Linking, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { Redirect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { BRANDS, VEHICLE_ICON, type VehicleType } from '@roadpals/shared';
 import { api, ApiError } from '@/lib/api';
-import { COLORS } from '@/lib/config';
+import { COLORS, PRIVACY_URL } from '@/lib/config';
 import { useSession } from '@/lib/session';
 import { Button, ui } from '@/components/ui';
 
@@ -57,8 +57,8 @@ export default function SignIn() {
           <Text style={{ fontSize: 16, color: COLORS.muted, fontWeight: '600' }}>Earn points for every km, every driver you pass and every wave.</Text>
 
           {step === 'phone' && (<>
-            <Text style={label}>Your phone number</Text>
-            <TextInput style={ui.input} value={phone} onChangeText={setPhone} keyboardType="phone-pad" placeholder="+1 555 123 4567" autoComplete="tel" />
+            <Text style={label}>Your phone number, with country code</Text>
+            <TextInput style={ui.input} value={phone} onChangeText={setPhone} keyboardType="phone-pad" placeholder="+1 416 555 0123" autoComplete="tel" />
             <Button title="Send code" onPress={sendCode} loading={busy} disabled={phone.replace(/\D/g, '').length < 8} />
           </>)}
 
@@ -90,6 +90,7 @@ export default function SignIn() {
 
           {error ? <Text style={{ color: COLORS.red, fontWeight: '700' }}>{error}</Text> : null}
           <Text style={[ui.muted, { marginTop: 20 }]}>RoadPals uses your location only while you drive. Waving is locked while the car is moving unless Passenger mode is on.</Text>
+          <Text style={[ui.muted, { color: COLORS.cyanDark, marginTop: 6 }]} onPress={() => Linking.openURL(PRIVACY_URL)}>Privacy policy</Text>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>

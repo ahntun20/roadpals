@@ -12,13 +12,14 @@ export default function Activity() {
   const { me, refresh } = useSession();
   const live = useLive();
   const [history, setHistory] = useState<LedgerEntry[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  // State is only set after awaiting, so loading on mount doesn't cause cascading renders.
+  const fetchAll = useCallback(async () => {
     try { setHistory((await api.ledger(150)).entries); await refresh(); } finally { setLoading(false); }
   }, [refresh]);
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => { void fetchAll(); }, [fetchAll]);
+  const load = () => { setLoading(true); void fetchAll(); };
 
   // Live entries first, then history without duplicates.
   const seen = new Set<string>();

@@ -29,6 +29,8 @@ export function processFix(ctx: Ctx, uid: string, fix: Fix): Promise<FixResult> 
 }
 
 async function processFixInner(ctx: Ctx, uid: string, fix: Fix): Promise<FixResult> {
+  const user = await getUser(ctx, uid);
+  if (!user) return { accepted: false, reason: 'no_user' }; // e.g. account just deleted
   const prev = await lastFix(ctx, uid);
   const verdict = checkFix(prev, fix, ctx.now());
   if (!verdict.ok) {
@@ -41,8 +43,6 @@ async function processFixInner(ctx: Ctx, uid: string, fix: Fix): Promise<FixResu
   const heading = fix.heading != null && fix.heading >= 0 ? fix.heading : prev && verdict.deltaM > 0 ? headingBetween(prev, fix) : prev?.heading ?? 0;
   await setPosition(ctx, uid, { ...fix, heading });
 
-  const user = await getUser(ctx, uid);
-  if (!user) return { accepted: false, reason: 'no_user' };
   const now = new Date(ctx.now());
   const day = localDayIndex(now, user.tz);
   const rules = ctx.rules();

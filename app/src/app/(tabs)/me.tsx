@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
+import { Alert, Linking, Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { BRANDS, VEHICLE_ICON, type RuleDef, type VehicleType } from '@roadpals/shared';
 import { api } from '@/lib/api';
-import { API_URL, COLORS } from '@/lib/config';
+import { API_URL, COLORS, PRIVACY_URL } from '@/lib/config';
 import { useLive } from '@/lib/live';
 import { useSession } from '@/lib/session';
 import { Button, Card, SectionTitle, ui } from '@/components/ui';
@@ -22,7 +22,6 @@ export default function MeScreen() {
     try { setMe(await api.updateMe(patch)); } catch (e) { live.toast('⚠️', (e as Error).message); }
   };
 
-  let lastCat = '';
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: COLORS.bg }}>
       <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
@@ -55,8 +54,8 @@ export default function MeScreen() {
 
         <SectionTitle>How you earn points</SectionTitle>
         <Card style={{ padding: 0 }}>
-          {rules.filter((r) => r.enabled).map((r) => {
-            const header = r.category !== lastCat ? (lastCat = r.category) : null;
+          {rules.filter((r) => r.enabled).map((r, i, list) => {
+            const header = i === 0 || list[i - 1].category !== r.category ? r.category : null;
             return (
               <View key={r.id}>
                 {header && <Text style={{ paddingHorizontal: 14, paddingTop: 12, fontWeight: '900', fontSize: 12, color: COLORS.cyanDark }}>{header.toUpperCase()}</Text>}
@@ -72,7 +71,9 @@ export default function MeScreen() {
 
         <Card>
           <Text style={ui.muted}>Server: {API_URL}</Text>
-          <Button title="Sign out" kind="danger" style={{ marginTop: 10 }} onPress={signOut} />
+          <Button title="Privacy policy" kind="secondary" style={{ marginTop: 10 }} onPress={() => Linking.openURL(PRIVACY_URL)} />
+          <Button title="Sign out" kind="dark" style={{ marginTop: 10 }} onPress={signOut} />
+          <Button title="Delete account" kind="danger" style={{ marginTop: 10 }} onPress={() => confirmDelete(signOut, (m) => live.toast('⚠️', m))} />
         </Card>
       </ScrollView>
     </SafeAreaView>
@@ -85,5 +86,28 @@ function Chip({ text, on, onPress, color }: { text: string; on: boolean; onPress
       {color ? <View style={{ width: 11, height: 11, borderRadius: 3, backgroundColor: color, borderWidth: 1, borderColor: 'rgba(0,0,0,0.15)' }} /> : null}
       <Text style={{ fontWeight: '700', textTransform: 'capitalize' }}>{text}</Text>
     </Pressable>
+  );
+}
+
+/** Two-step confirmation, then permanent deletion of the account and its data. */
+function confirmDelete(signOut: () => Promise<void>, onError: (msg: string) => void) {
+  Alert.alert(
+    'Delete your account?',
+    'This permanently deletes your account, points, passes, purchases and coupons. It can’t be undone.',
+    [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await api.deleteAccount();
+            await signOut();
+          } catch (e) {
+            onError((e as Error).message);
+          }
+        },
+      },
+    ],
   );
 }

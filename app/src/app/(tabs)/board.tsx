@@ -15,16 +15,17 @@ export default function Board() {
   const [team, setTeam] = useState<Team | null>(null);
   const [teamName, setTeamName] = useState('');
   const [code, setCode] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  // State is only set after awaiting, so loading on mount doesn't cause cascading renders.
+  const fetchAll = useCallback(async () => {
     try {
       const [l, t] = await Promise.all([api.leaderboard(), api.team()]);
       setLb(l); setTeam(t.team);
     } finally { setLoading(false); }
   }, []);
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => { void fetchAll(); }, [fetchAll]);
+  const load = useCallback(() => { setLoading(true); return fetchAll(); }, [fetchAll]);
 
   const act = async (fn: () => Promise<unknown>) => {
     try { await fn(); await Promise.all([load(), refresh()]); } catch (e) { live.toast('⚠️', (e as Error).message); }

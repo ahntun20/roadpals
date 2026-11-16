@@ -85,4 +85,5 @@ export const api = {
   createTeam: (name: string) => request<{ team: Team }>('POST', '/v1/teams', { name }),
   joinTeam: (code: string) => request<{ team: Team }>('POST', '/v1/teams/join', { code }),
   leaveTeam: () => request<{ ok: true }>('POST', '/v1/teams/leave', {}),
+  deleteAccount: () => request<{ deleted: boolean }>('DELETE', '/v1/me'),
 };

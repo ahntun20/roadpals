@@ -18,16 +18,18 @@ import { dailyKey, processFix } from './services/location';
 import { HazardError, listNear, report, vote } from './services/hazards';
 import { buy, coupons, equip, ShopError } from './services/shop';
 import { createTeam, joinTeam, leaderboard, leaveTeam, myTeam, SocialError } from './services/social';
-import { getUser, mePayload, refreshProfile } from './services/users';
+import { deleteUser, getUser, mePayload, refreshProfile } from './services/users';
+import { privacyHtml } from './privacy';
 import { wave } from './services/waves';
 import { bbox, code, otp } from './util';
+import { SmsError, twilioVerifier, type SmsVerifier } from './sms';
 import { removePosition } from './services/live';
 
 declare module 'fastify' {
   interface FastifyRequest { uid: string }
 }
 
-export interface AppDeps { db: Db; redis: Redis; sub: Redis; now?: () => number; logger?: boolean }
+export interface AppDeps { db: Db; redis: Redis; sub: Redis; now?: () => number; logger?: boolean; sms?: SmsVerifier | null }
 
 const fixSchema = z.object({
   lat: z.number().min(-90).max(90),
@@ -47,6 +49,8 @@ export async function buildApp(deps: AppDeps) {
   await rulesStore.load();
   const hub = new Hub(deps.redis, deps.sub);
   await hub.start();
+  // Real SMS when Twilio is configured; otherwise codes are only usable in dev mode or via the beta code.
+  const sms: SmsVerifier | null = deps.sms !== undefined ? deps.sms : config.twilio ? twilioVerifier(config.twilio) : null;
   const ctx: Ctx = { db: deps.db, redis: deps.redis, rules: rulesStore.get, send: hub.send, now: deps.now ?? Date.now };
 
   await app.register(cors, { origin: true });
@@ -58,6 +62,7 @@ export async function buildApp(deps: AppDeps) {
   app.setErrorHandler((err, _req, reply) => {
     if (err instanceof z.ZodError) return reply.code(400).send({ error: err.issues[0]?.message ?? 'Invalid request' });
     if (err instanceof InsufficientBalance) return reply.code(402).send({ error: err.message });
+    if (err instanceof SmsError) return reply.code(400).send({ error: err.message });
     if (err instanceof ShopError || err instanceof HazardError || err instanceof SocialError) return reply.code(400).send({ error: err.message });
     const status = (err as { statusCode?: number }).statusCode;
     if (status && status < 500) return reply.code(status).send({ error: (err as Error).message });
@@ -72,7 +77,7 @@ export async function buildApp(deps: AppDeps) {
   };
   const auth = async (req: FastifyRequest, reply: FastifyReply) => {
     const uid = verifyToken(req.headers.authorization?.replace(/^Bearer /, ''));
-    if (!uid) return reply.code(401).send({ error: 'Sign in again' });
+    if (!uid || (await ctx.redis.exists(`deleted:${uid}`))) return reply.code(401).send({ error: 'Sign in again' });
     req.uid = uid;
   };
   const admin = async (req: FastifyRequest, reply: FastifyReply) => {
@@ -80,16 +85,21 @@ export async function buildApp(deps: AppDeps) {
   };
 
   app.get('/health', async () => ({ ok: true, connections: hub.connections() }));
+  app.get('/privacy', async (_req, reply) => reply.type('text/html; charset=utf-8').send(privacyHtml(config.privacyContact)));
 
   // ---------- auth: phone number + 6-digit code ----------
   // Limit by phone number (not IP), so many users behind one network can still sign in.
   const byPhone = (req: FastifyRequest) => `phone:${String((req.body as { phone?: unknown })?.phone ?? req.ip)}`;
   app.post('/v1/auth/request-code', { config: { rateLimit: { max: 5, timeWindow: '10 minutes', keyGenerator: byPhone } } }, async (req) => {
     const { phone } = z.object({ phone: phoneSchema }).parse(req.body);
+    if (sms) {
+      if (!phone.startsWith('+')) throw new SmsError('Include your country code, e.g. +1 416 555 0123.');
+      await sms.send(phone);
+      return { sent: true };
+    }
     const c = otp();
     await ctx.redis.set(`otp:${phone}`, JSON.stringify({ code: c, tries: 0 }), 'EX', 600);
-    // Plug in your SMS provider here (e.g. Twilio Verify). In dev mode the code is returned.
-    app.log.info({ phone }, 'verification code requested');
+    app.log.info({ phone }, 'verification code requested (no SMS provider configured)');
     return config.devLogin ? { sent: true, devCode: c } : { sent: true };
   });
 
@@ -105,7 +115,17 @@ export async function buildApp(deps: AppDeps) {
     }).parse(req.body);
     const stored = await ctx.redis.get(`otp:${body.phone}`);
     const rec = stored ? (JSON.parse(stored) as { code: string; tries: number }) : null;
-    const ok = (config.devLogin && body.code === '000000') || (!!config.betaLoginCode && body.code === config.betaLoginCode) || (rec && rec.code === body.code);
+    let ok = (config.devLogin && body.code === '000000') || (!!config.betaLoginCode && body.code === config.betaLoginCode) || (!!rec && rec.code === body.code);
+    if (!ok && sms) {
+      // Twilio accepts a code only once, but new drivers send it twice (before and after choosing
+      // a name), so remember a successful check for 10 minutes.
+      const verifiedKey = `smsok:${body.phone}`;
+      ok = (await ctx.redis.get(verifiedKey)) === body.code;
+      if (!ok && (await sms.check(body.phone, body.code))) {
+        ok = true;
+        await ctx.redis.set(verifiedKey, body.code, 'EX', 600);
+      }
+    }
     if (!ok) {
       if (rec) {
         rec.tries++;
@@ -131,7 +151,7 @@ export async function buildApp(deps: AppDeps) {
       }
       isNew = true;
     }
-    await ctx.redis.del(`otp:${body.phone}`); // single use, once sign-in has succeeded
+    await ctx.redis.del(`otp:${body.phone}`, `smsok:${body.phone}`); // single use, once sign-in has succeeded
     await refreshProfile(ctx, user);
     return { token: sign(String(user.id)), isNew, me: await mePayload(ctx, user) };
   });
@@ -161,6 +181,13 @@ export async function buildApp(deps: AppDeps) {
     );
     await refreshProfile(ctx, r.rows[0]);
     return mePayload(ctx, r.rows[0]);
+  });
+
+  // Permanently delete the account and its data. The app asks for confirmation first.
+  app.delete('/v1/me', { preHandler: auth }, async (req) => {
+    await deleteUser(ctx, req.uid);
+    await ctx.redis.set(`deleted:${req.uid}`, '1', 'EX', 31 * 86400); // outlives any issued token (30 days)
+    return { deleted: true };
   });
 
   app.get('/v1/me/ledger', { preHandler: auth }, async (req) => {
@@ -299,6 +326,8 @@ export async function buildApp(deps: AppDeps) {
   app.get('/v1/ws', { websocket: true }, (socket, req) => {
     const uid = verifyToken((req.query as { token?: string }).token);
     if (!uid) { socket.close(4401, 'unauthorized'); return; }
+    // Listeners must be attached synchronously, so the deleted-account check closes the socket afterwards.
+    void ctx.redis.exists(`deleted:${uid}`).then((gone) => { if (gone) socket.close(4401, 'unauthorized'); });
     hub.add(uid, socket);
     socket.send(JSON.stringify({ t: 'hello', userId: uid }));
     socket.on('message', async (raw: Buffer) => {

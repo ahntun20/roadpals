@@ -16,6 +16,7 @@ async function main() {
   const stopJobs = startJobs(ctx, (m) => app.log.info(m));
   await app.listen({ port: config.port, host: config.host });
   if (config.devLogin) app.log.warn('DEV_LOGIN is on: code 000000 signs anyone in. Turn it off in production.');
+  app.log.info(config.twilio ? 'SMS sign-in: Twilio Verify' : 'SMS sign-in: not configured (set TWILIO_* to send real codes)');
   if (config.betaLoginCode) app.log.warn('BETA_LOGIN_CODE is set: anyone with that code can sign in. Remove it once SMS is connected.');
 
   const shutdown = async () => {

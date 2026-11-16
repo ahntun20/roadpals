@@ -102,3 +102,27 @@ export async function mePayload(ctx: Ctx, u: UserRow) {
     profile: profileOf(u),
   };
 }
+
+/**
+ * Permanently delete a user and their data (app-store requirement). Postgres rows cascade
+ * (ledger, encounters, inventory, coupons, check-ins, votes…); hazards they reported stay on the
+ * map without their name. Redis: live position, profile, explored areas, pair states, boosts.
+ */
+export async function deleteUser(ctx: Ctx, uid: string): Promise<void> {
+  await ctx.db.query('DELETE FROM users WHERE id=$1', [uid]);
+  const r = ctx.redis;
+  await r.multi()
+    .zrem('live:pos', uid).zrem('live:seen', uid)
+    .del(`live:fix:${uid}`, `prof:${uid}`, `explored:${uid}`, `prompted:${uid}`, `wavefrom:${uid}`, keys.doubleBoost(uid), keys.radiusBoost(uid))
+    .exec();
+  for (const pattern of [`pair:${uid}:*`, `pair:*:${uid}`, `day:${uid}:*`, `wavedby:${uid}:*`, 'lb:*']) {
+    let cursor = '0';
+    do {
+      const [next, found] = await r.scan(cursor, 'MATCH', pattern, 'COUNT', 500);
+      cursor = next;
+      if (!found.length) continue;
+      if (pattern === 'lb:*') for (const k of found) await r.zrem(k, uid);
+      else await r.del(...found);
+    } while (cursor !== '0');
+  }
+}

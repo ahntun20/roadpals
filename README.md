@@ -58,7 +58,7 @@ SIM_LAT=40.758 SIM_LNG=-73.9855 SIM_DRIVERS=25 npm run simulate
 ```bash
 cd app
 npm install
-EXPO_PUBLIC_API_URL=http://YOUR-COMPUTER-LAN-IP:4000 npx expo start
+EXPO_PUBLIC_API_URL=http://YOUR-COMPUTER-LAN-IP:4000 npx expo start --go
 ```
 
 Scan the QR code with **Expo Go**. Sign in with any phone number — in dev mode the code is shown on screen (and `000000` always works).
@@ -101,7 +101,7 @@ All endpoints are under `/v1`. Send `Authorization: Bearer <token>`.
 |---|---|---|
 | POST | `/auth/request-code` | Send a 6-digit code to a phone number |
 | POST | `/auth/verify` | Sign in / sign up (name, vehicle, brand, invite code) → token |
-| GET/PATCH | `/me` | Profile, level, balance, boosts, passenger mode |
+| GET/PATCH/DELETE | `/me` | Profile, level, balance, boosts, passenger mode; DELETE removes the account and its data |
 | GET | `/me/ledger` | Points history |
 | GET | `/rules`, `/catalog` | Point rules; shop items, brands and hazard types |
 | POST | `/locations` | Batch of GPS fixes (the app's background task uses this) |
@@ -115,6 +115,7 @@ All endpoints are under `/v1`. Send `Authorization: Bearer <token>`.
 | POST | `/shop/buy`, `/shop/equip` · GET `/coupons` | Rewards shop |
 | GET | `/leaderboard` | This week's ranking |
 | GET/POST | `/teams/me`, `/teams`, `/teams/join`, `/teams/leave` | Teams |
+| GET | `/privacy` (no `/v1`) | Privacy policy page |
 | WS | `/ws?token=…` | Live: nearby drivers, points, waves, hazard prompts; send `fix` and `wave` |
 
 Admin endpoints need the `x-admin-token` header: `PUT /admin/rules` (change points, toggle rules, set parameters), `POST /admin/places`, `GET/POST /admin/map-edits`, `POST /admin/reverse` (remove points earned by cheating).
@@ -145,7 +146,7 @@ The repo includes `railway.json`, so Railway builds `server/Dockerfile` and chec
    | `BETA_LOGIN_CODE` | a secret 6-digit code for testers (until SMS is connected) |
 
 4. **Settings → Networking → Generate Domain** (port 4000). Open `https://<your-domain>/health`.
-5. App: `EXPO_PUBLIC_API_URL=https://<your-domain>` then `npx expo start --clear`. Sign in with any number and the beta code.
+5. App: `EXPO_PUBLIC_API_URL=https://<your-domain>` then `npx expo start --go --clear` (Expo Go) or `npx expo start --dev-client --clear` (development build). Sign in with any number and the beta code.
 6. Optional: sample places and fake drivers against the hosted server:
    ```bash
    API_URL=https://<your-domain> SIM_LOGIN_CODE=<beta code> SIM_LAT=… SIM_LNG=… npm run simulate
@@ -153,10 +154,48 @@ The repo includes `railway.json`, so Railway builds `server/Dockerfile` and chec
 
 Every push to `main` redeploys automatically.
 
+## Development build (Android): background tracking, own app icon
+
+Expo Go can't track GPS with the screen off. A development build is your own RoadPals app, with live reload from your computer and background tracking. `app/eas.json` has three profiles, all pointing at the Railway server:
+
+| Profile | What you get | Command (in `app/`) |
+|---|---|---|
+| `development` | RoadPals dev app; loads code from your computer (`npx expo start --dev-client`) | `npm run build:dev` |
+| `preview` | Standalone test app for friends — no computer needed | `npm run build:preview` |
+| `production` | Play Store bundle (`.aab`) | `npm run build:prod` |
+
+One-time setup:
+
+1. Google Maps key for Android (without it the map is blank in builds; Expo Go has its own): in Google Cloud Console create a project, enable **Maps SDK for Android**, create an API key and restrict it to Android apps with package `com.roadpals.app`. Then store it on EAS:
+   ```bash
+   cd app
+   npx eas-cli@latest login
+   npx eas-cli@latest env:create --name GOOGLE_MAPS_API_KEY --value AIza... --visibility sensitive
+   # when asked, pick all environments (development, preview, production)
+   ```
+2. Build: `npm run build:dev` (first build takes ~10–20 min in Expo's cloud). Open the link it prints on your phone and install the `.apk` (allow "install unknown apps" for your browser).
+3. Run: `npx expo start --dev-client --tunnel` on your computer, then open RoadPals on the phone.
+
+After installing `expo-dev-client`, plain `npx expo start` targets the development build. Use `npx expo start --go` for Expo Go.
+
+## Real SMS sign-in (Twilio Verify)
+
+1. Create a Twilio account, then **Verify → Services → Create** (any name, e.g. RoadPals).
+2. On Railway, add `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` (from the Twilio console home) and `TWILIO_VERIFY_SERVICE_SID` (starts with `VA`).
+3. Redeploy. The log says `SMS sign-in: Twilio Verify`. Phone numbers must include the country code (`+1…`).
+4. Once real sign-in works, remove `BETA_LOGIN_CODE`.
+
+Twilio charges per verification; set a spending limit in its console.
+
+## Privacy and account deletion
+
+- Privacy policy: `https://<your-domain>/privacy` (set `PRIVACY_CONTACT_EMAIL` on Railway). It describes what the code does; have it reviewed before launch. Use this URL in the store listings.
+- Users delete their account in **Me → Delete account**. `DELETE /v1/me` removes the user, their ledger, passes, inventory, coupons and live data; their hazard reports stay without their name, and old tokens stop working immediately.
+
 ## Going to production — checklist
 
 - [ ] Set `NODE_ENV=production`, a long random `JWT_SECRET`, `ADMIN_TOKEN`, and `DEV_LOGIN=false`. Remove `BETA_LOGIN_CODE` once SMS works.
-- [ ] Plug an SMS provider (e.g. Twilio Verify) into `POST /v1/auth/request-code` in `server/src/app.ts`.
+- [ ] Turn on real SMS: set the three `TWILIO_*` variables (see above), then remove `BETA_LOGIN_CODE`.
 - [ ] Use managed Postgres and Redis with backups.
 - [ ] Android: add a Google Maps API key (`GOOGLE_MAPS_API_KEY`, see `app/app.json`).
 - [ ] Set real bundle IDs in `app/app.json`, then build with EAS and submit to the stores. Both stores review background location closely: explain in the listing and the permission text why you need it.
