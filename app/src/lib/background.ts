@@ -63,12 +63,18 @@ TaskManager.defineTask<{ locations: Location.LocationObject[] }>(DRIVE_TASK, asy
 });
 
 let foregroundSub: Location.LocationSubscription | null = null;
+let active = false;
+/** True while a drive is on (used to keep nearby drivers refreshing when you're stopped). */
+export function driveActive(): boolean {
+  return active;
+}
 
 export type DriveMode = 'background' | 'foreground';
 
 export async function startDriving(): Promise<DriveMode> {
   const fg = await Location.requestForegroundPermissionsAsync();
   if (fg.status !== 'granted') throw new Error('Location permission is needed to drive with RoadPals.');
+  active = true;
   try {
     const bg = await Location.requestBackgroundPermissionsAsync();
     if (bg.status !== 'granted') throw new Error('no background permission');
@@ -92,7 +98,7 @@ export async function startDriving(): Promise<DriveMode> {
     // Expo Go, or the user only allowed "While using the app".
     if (!foregroundSub) {
       foregroundSub = await Location.watchPositionAsync(
-        { accuracy: Location.Accuracy.BestForNavigation, timeInterval: 3000, distanceInterval: 10 },
+        { accuracy: Location.Accuracy.BestForNavigation, timeInterval: 3000, distanceInterval: 0 },
         (l) => handle([l]),
       );
     }
@@ -101,6 +107,7 @@ export async function startDriving(): Promise<DriveMode> {
 }
 
 export async function stopDriving(): Promise<void> {
+  active = false;
   foregroundSub?.remove();
   foregroundSub = null;
   if (await Location.hasStartedLocationUpdatesAsync(DRIVE_TASK).catch(() => false)) {
@@ -111,6 +118,7 @@ export async function stopDriving(): Promise<void> {
 }
 
 export async function isDriving(): Promise<boolean> {
-  if (foregroundSub) return true;
-  return Location.hasStartedLocationUpdatesAsync(DRIVE_TASK).catch(() => false);
+  if (foregroundSub) return (active = true);
+  active = await Location.hasStartedLocationUpdatesAsync(DRIVE_TASK).catch(() => false);
+  return active;
 }

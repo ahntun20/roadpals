@@ -6,7 +6,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import * as Haptics from 'expo-haptics';
 import type { Fix, HazardDTO, LedgerEntry, PublicDriver, ServerMsg } from '@roadpals/shared';
 import { getToken } from './api';
-import { onFix } from './background';
+import { driveActive, onFix } from './background';
 import { WS_URL } from './config';
 import { useSession } from './session';
 
@@ -53,6 +53,20 @@ export function LiveProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => onFix(setMyFix), []);
+
+  // Phones send few GPS updates when you're not moving. While a drive is on, re-send the last
+  // position every few seconds so nearby drivers, waves and hazard prompts keep updating.
+  const myFixRef = useRef<Fix | null>(null);
+  myFixRef.current = myFix;
+  useEffect(() => {
+    const t = setInterval(() => {
+      const f = myFixRef.current;
+      if (!f || !driveActive() || ws.current?.readyState !== WebSocket.OPEN) return;
+      if (Date.now() - f.ts < 4000) return;
+      ws.current.send(JSON.stringify({ t: 'fix', fix: { ...f, ts: Date.now(), speed: 0 } }));
+    }, 4000);
+    return () => clearInterval(t);
+  }, []);
 
   useEffect(() => {
     if (!me?.id) return;
